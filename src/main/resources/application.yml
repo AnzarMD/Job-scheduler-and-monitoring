@@ -43,6 +43,8 @@ spring:
     properties:
       org.quartz.jobStore.isClustered: true
       org.quartz.scheduler.instanceId: AUTO
+      org.quartz.jobStore.driverDelegateClass: org.quartz.impl.jdbcjobstore.PostgreSQLDelegate
+
 
 cloudflow:
   jwt:

@@ -4,6 +4,7 @@ import com.cloudflow.cloudflow.job.dto.CreateJobRequest;
 import com.cloudflow.cloudflow.job.dto.JobResponse;
 import com.cloudflow.cloudflow.job.dto.UpdateJobRequest;
 import com.cloudflow.cloudflow.multitenancy.TenantContext;
+import com.cloudflow.cloudflow.scheduler.JobSchedulerService;
 import com.cloudflow.cloudflow.tenant.Tenant;
 import com.cloudflow.cloudflow.tenant.TenantRepository;
 import com.cloudflow.cloudflow.user.User;
@@ -25,13 +26,12 @@ public class JobService {
     private final TenantRepository tenantRepository;
     private final UserRepository userRepository;
     private final CronValidator cronValidator;
+    private final JobSchedulerService jobSchedulerService; // NEW
 
-    // Helper: gets current tenant from ThreadLocal (set by TenantFilter)
     private UUID currentTenantId() {
         return TenantContext.getTenantId();
     }
 
-    // Helper: gets current user UUID from Spring Security context
     private UUID currentUserId() {
         return UUID.fromString(
                 SecurityContextHolder.getContext().getAuthentication().getName()
@@ -55,11 +55,8 @@ public class JobService {
     @Transactional
     public JobResponse createJob(CreateJobRequest request) {
         UUID tenantId = currentTenantId();
-
-        // Validate cron expression before saving
         cronValidator.validateOrThrow(request.getCronExpression());
 
-        // Enforce unique job name within this tenant
         if (jobRepository.existsByNameAndTenantId(request.getName(), tenantId)) {
             throw new IllegalArgumentException("A job with this name already exists");
         }
@@ -87,6 +84,10 @@ public class JobService {
                 .build();
 
         job = jobRepository.save(job);
+
+        // Register with Quartz after saving to DB
+        jobSchedulerService.scheduleJob(job);
+
         return JobResponse.from(job);
     }
 
@@ -95,7 +96,8 @@ public class JobService {
         Job job = jobRepository.findByIdAndTenantId(jobId, currentTenantId())
                 .orElseThrow(() -> new IllegalArgumentException("Job not found: " + jobId));
 
-        // Only update fields that were actually provided (not null)
+        boolean cronChanged = false;
+
         if (request.getName() != null) {
             if (!request.getName().equals(job.getName()) &&
                     jobRepository.existsByNameAndTenantId(request.getName(), currentTenantId())) {
@@ -107,8 +109,12 @@ public class JobService {
         if (request.getCronExpression() != null) {
             cronValidator.validateOrThrow(request.getCronExpression());
             job.setCronExpression(request.getCronExpression());
+            cronChanged = true;
         }
-        if (request.getTimezone() != null) job.setTimezone(request.getTimezone());
+        if (request.getTimezone() != null) {
+            job.setTimezone(request.getTimezone());
+            cronChanged = true;
+        }
         if (request.getTargetUrl() != null) job.setTargetUrl(request.getTargetUrl());
         if (request.getHttpMethod() != null) job.setHttpMethod(request.getHttpMethod());
         if (request.getRequestBody() != null) job.setRequestBody(request.getRequestBody());
@@ -118,6 +124,12 @@ public class JobService {
         if (request.getRetryDelaySeconds() != null) job.setRetryDelaySeconds(request.getRetryDelaySeconds());
 
         job = jobRepository.save(job);
+
+        // Only reschedule in Quartz if the cron or timezone changed
+        if (cronChanged) {
+            jobSchedulerService.rescheduleJob(job);
+        }
+
         return JobResponse.from(job);
     }
 
@@ -125,6 +137,7 @@ public class JobService {
     public void deleteJob(UUID jobId) {
         Job job = jobRepository.findByIdAndTenantId(jobId, currentTenantId())
                 .orElseThrow(() -> new IllegalArgumentException("Job not found: " + jobId));
+        jobSchedulerService.deleteJob(jobId); // Remove from Quartz first
         jobRepository.delete(job);
     }
 
@@ -133,6 +146,7 @@ public class JobService {
         Job job = jobRepository.findByIdAndTenantId(jobId, currentTenantId())
                 .orElseThrow(() -> new IllegalArgumentException("Job not found: " + jobId));
         job.setStatus("PAUSED");
+        jobSchedulerService.pauseJob(jobId); // Pause in Quartz
         return JobResponse.from(jobRepository.save(job));
     }
 
@@ -141,6 +155,15 @@ public class JobService {
         Job job = jobRepository.findByIdAndTenantId(jobId, currentTenantId())
                 .orElseThrow(() -> new IllegalArgumentException("Job not found: " + jobId));
         job.setStatus("ACTIVE");
+        jobSchedulerService.resumeJob(jobId); // Resume in Quartz
         return JobResponse.from(jobRepository.save(job));
+    }
+
+    @Transactional
+    public JobResponse triggerJobNow(UUID jobId) {
+        Job job = jobRepository.findByIdAndTenantId(jobId, currentTenantId())
+                .orElseThrow(() -> new IllegalArgumentException("Job not found: " + jobId));
+        jobSchedulerService.triggerJobNow(jobId);
+        return JobResponse.from(job);
     }
 }

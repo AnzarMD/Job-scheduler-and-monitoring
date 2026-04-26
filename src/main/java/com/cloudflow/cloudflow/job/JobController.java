@@ -71,4 +71,10 @@ public class JobController {
     public ResponseEntity<JobResponse> resumeJob(@PathVariable UUID id) {
         return ResponseEntity.ok(jobService.resumeJob(id));
     }
+
+    @PostMapping("/{id}/trigger")
+    @Operation(summary = "Manually trigger a job immediately")
+    public ResponseEntity<JobResponse> triggerJob(@PathVariable UUID id) {
+        return ResponseEntity.ok(jobService.triggerJobNow(id));
+    }
 }
