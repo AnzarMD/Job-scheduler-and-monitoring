@@ -1,5 +1,6 @@
 package com.cloudflow.cloudflow.config;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -12,6 +13,7 @@ import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
+@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -54,6 +56,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGeneral(
             Exception ex, HttpServletRequest request) {
+        log.error("Unexpected error on {}: {}", request.getRequestURI(), ex.getMessage(), ex);
+
 
         Map<String, Object> body = new HashMap<>();
         body.put("timestamp", OffsetDateTime.now());
