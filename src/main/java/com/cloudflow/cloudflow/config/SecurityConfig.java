@@ -52,7 +52,7 @@ public class SecurityConfig {
 //    {
 //        "email": "admin@acme.com",
 //            "password": "password123",
-//            "slug": "acmecorp"
-    //eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJjNGFhYWYyYi0xNzQ0LTQwMmItYjUwNy05ZjEwZGQ2Mzk4ZmEiLCJ0ZW5hbnRJZCI6IjZkMTE1NzU3LTgzZmQtNGQ0ZC1hNDA2LTg5NzRjNmFiMDYwNSIsImVtYWlsIjoiYWRtaW5AYWNtZS5jb20iLCJyb2xlIjoiT1dORVIiLCJpYXQiOjE3NzczMjg5MDksImV4cCI6MTc3NzQxNTMwOX0.qciG5Uc-oYKpgwITUXTMvoONAhHfS-UxQqvnyTBsoBZV3o-0McQmd335c2JR-Q5lqBOgOb8Buv_hnf67Rqw2RQ
+//            "slug": "acmecorp
 //    }
+    //eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJjNGFhYWYyYi0xNzQ0LTQwMmItYjUwNy05ZjEwZGQ2Mzk4ZmEiLCJ0ZW5hbnRJZCI6IjZkMTE1NzU3LTgzZmQtNGQ0ZC1hNDA2LTg5NzRjNmFiMDYwNSIsImVtYWlsIjoiYWRtaW5AYWNtZS5jb20iLCJyb2xlIjoiT1dORVIiLCJpYXQiOjE3NzczMjg5MDksImV4cCI6MTc3NzQxNTMwOX0.qciG5Uc-oYKpgwITUXTMvoONAhHfS-UxQqvnyTBsoBZV3o-0McQmd335c2JR-Q5lqBOgOb8Buv_hnf67Rqw2RQ
 }

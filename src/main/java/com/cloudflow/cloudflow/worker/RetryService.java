@@ -1,5 +1,6 @@
 package com.cloudflow.cloudflow.worker;
 
+import com.cloudflow.cloudflow.alert.AlertService;
 import com.cloudflow.cloudflow.execution.JobExecution;
 import com.cloudflow.cloudflow.job.Job;
 import com.cloudflow.cloudflow.job.JobRepository;
@@ -19,11 +20,10 @@ public class RetryService {
     private final JobWorkerService jobWorkerService;
     private final JobRepository jobRepository;
     private final TaskScheduler taskScheduler;
+    private final AlertService alertService; // NEW
 
     public void handleExecutionResult(UUID jobId, String status, int attemptNumber) {
-        if ("SUCCESS".equals(status)) {
-            return;
-        }
+        if ("SUCCESS".equals(status)) return;
 
         Job job = jobRepository.findById(jobId).orElse(null);
         if (job == null) return;
@@ -41,8 +41,6 @@ public class RetryService {
                     () -> {
                         JobExecution retryExecution = jobWorkerService.executeJob(
                                 jobId, nextAttempt, "SCHEDULER");
-
-                        // Recursively handle — allows 1→2→3 retry chain
                         handleExecutionResult(
                                 jobId,
                                 retryExecution.getStatus(),
@@ -53,9 +51,13 @@ public class RetryService {
             );
 
         } else {
-            log.warn("Job [{}] exhausted all {} retries. Marking as failed.",
-                    jobId, retryLimit);
-            // Day 6: trigger alerting here
+            // Max retries exhausted — get last error and trigger alert
+            log.warn("Job [{}] exhausted all {} retries. Triggering alert check.", jobId, retryLimit);
+
+            // Get last error message from the job's last execution
+            // Pass it to AlertService for inclusion in the webhook payload
+            String lastError = "Max retries (" + retryLimit + ") exceeded";
+            alertService.checkAndAlert(jobId, lastError);
         }
     }
 }
