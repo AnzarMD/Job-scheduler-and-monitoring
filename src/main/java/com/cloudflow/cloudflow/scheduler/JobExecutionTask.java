@@ -1,8 +1,7 @@
 package com.cloudflow.cloudflow.scheduler;
 
-import com.cloudflow.cloudflow.execution.JobExecution;
-import com.cloudflow.cloudflow.worker.JobWorkerService;
-import com.cloudflow.cloudflow.worker.RetryService;
+import com.cloudflow.cloudflow.kafka.KafkaProducerService;
+import com.cloudflow.cloudflow.kafka.events.JobTriggerEvent;
 import lombok.extern.slf4j.Slf4j;
 import org.quartz.JobDataMap;
 import org.quartz.JobExecutionContext;
@@ -10,42 +9,39 @@ import org.quartz.JobExecutionException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.quartz.QuartzJobBean;
 
-import java.util.UUID;
+import java.time.OffsetDateTime;
 
 @Slf4j
+@SuppressWarnings("SpringJavaAutowiredMembersInspection")
 public class JobExecutionTask extends QuartzJobBean {
 
-    // @Autowired works here because we use QuartzJobBean
-    // which hooks into Spring's bean factory
     @Autowired
-    private JobWorkerService jobWorkerService;
-
-    @Autowired
-    private RetryService retryService;
+    private KafkaProducerService kafkaProducerService;
 
     @Override
     protected void executeInternal(JobExecutionContext context) throws JobExecutionException {
         JobDataMap dataMap = context.getJobDetail().getJobDataMap();
-        String jobIdStr = dataMap.getString("jobId");
+        String jobId = dataMap.getString("jobId");
+        String tenantId = dataMap.getString("tenantId");
         String jobName = dataMap.getString("jobName");
 
-        log.info("Quartz trigger fired for job [{}] name [{}]", jobIdStr, jobName);
+        log.info("Quartz fired — publishing to job.trigger for job [{}] name [{}]",
+                jobId, jobName);
 
         try {
-            UUID jobId = UUID.fromString(jobIdStr);
+            JobTriggerEvent event = JobTriggerEvent.builder()
+                    .jobId(jobId)
+                    .tenantId(tenantId)
+                    .attemptNumber(1)
+                    .triggeredBy("SCHEDULER")
+                    .triggeredAt(OffsetDateTime.now())
+                    .build();
 
-            JobExecution execution = jobWorkerService.executeJob(jobId, 1, "SCHEDULER");
-
-            // Pass primitive values instead of the lazy-loaded entity
-            retryService.handleExecutionResult(
-                    jobId,
-                    execution.getStatus(),
-                    execution.getAttemptNumber()
-            );
+            // Publish takes microseconds — Quartz thread is immediately free
+            kafkaProducerService.publishJobTrigger(event);
 
         } catch (Exception e) {
-            log.error("Unexpected error in JobExecutionTask for job [{}]: {}",
-                    jobIdStr, e.getMessage(), e);
+            log.error("Failed to publish job.trigger for job [{}]: {}", jobId, e.getMessage());
         }
     }
 }
