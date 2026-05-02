@@ -11,6 +11,9 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import com.cloudflow.cloudflow.config.RateLimitFilter;
+
+
 
 @Configuration
 @EnableWebSecurity
@@ -18,6 +21,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private final TenantFilter tenantFilter;
+
+    private final RateLimitFilter rateLimitFilter;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -40,7 +45,8 @@ public class SecurityConfig {
                         .anyRequest().authenticated()
                 )
                 // Run TenantFilter before Spring's own auth filter
-                .addFilterBefore(tenantFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(tenantFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(rateLimitFilter, TenantFilter.class);
 
         return http.build();
     }
@@ -52,7 +58,6 @@ public class SecurityConfig {
 //    {
 //        "email": "admin@acme.com",
 //            "password": "password123",
-//            "slug": "acmecorp
+//            "slug": "acmecorp"
 //    }
-    //eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJjNGFhYWYyYi0xNzQ0LTQwMmItYjUwNy05ZjEwZGQ2Mzk4ZmEiLCJ0ZW5hbnRJZCI6IjZkMTE1NzU3LTgzZmQtNGQ0ZC1hNDA2LTg5NzRjNmFiMDYwNSIsImVtYWlsIjoiYWRtaW5AYWNtZS5jb20iLCJyb2xlIjoiT1dORVIiLCJpYXQiOjE3NzczMjg5MDksImV4cCI6MTc3NzQxNTMwOX0.qciG5Uc-oYKpgwITUXTMvoONAhHfS-UxQqvnyTBsoBZV3o-0McQmd335c2JR-Q5lqBOgOb8Buv_hnf67Rqw2RQ
 }
