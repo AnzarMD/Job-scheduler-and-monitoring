@@ -22,4 +22,7 @@ public interface JobRepository extends JpaRepository<Job, UUID> {
 
     // Count active jobs for a tenant (used for plan limit enforcement)
     long countByTenantIdAndStatus(UUID tenantId, String status);
+
+
+    long countByStatus(String status);
 }

@@ -5,6 +5,7 @@ import com.cloudflow.cloudflow.execution.JobExecutionRepository;
 import com.cloudflow.cloudflow.job.Job;
 import com.cloudflow.cloudflow.job.JobRepository;
 import com.cloudflow.cloudflow.tenant.Tenant;
+import com.cloudflow.cloudflow.websocket.JobStatusBroadcaster;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.*;
@@ -13,6 +14,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -25,6 +28,8 @@ public class JobWorkerService {
     private final JobRepository jobRepository;
     private final JobExecutionRepository executionRepository;
     private final RestTemplate restTemplate;
+    private final JobStatusBroadcaster jobStatusBroadcaster;
+    private final MeterRegistry meterRegistry;
 
     @Transactional
     public JobExecution executeJob(UUID jobId, int attemptNumber, String triggeredBy) {
@@ -91,6 +96,15 @@ public class JobWorkerService {
 
             log.info("Job [{}] SUCCESS in {}ms — HTTP {}", jobId, duration,
                     response.getStatusCode().value());
+            meterRegistry.counter("cloudflow.job.executions",
+                    "status", "SUCCESS",
+                    "tenantId", tenant.getId().toString()
+            ).increment();
+
+            // Record duration as a timer (Prometheus gets min/max/avg/percentiles)
+            meterRegistry.timer("cloudflow.job.duration",
+                    "status", "SUCCESS"
+            ).record(duration, java.util.concurrent.TimeUnit.MILLISECONDS);
 
         } catch (HttpStatusCodeException e) {
             // Got an HTTP response but with error status (4xx, 5xx)
@@ -108,6 +122,14 @@ public class JobWorkerService {
 
             log.warn("Job [{}] FAILED — HTTP {} after {}ms", jobId,
                     e.getStatusCode().value(), duration);
+            meterRegistry.counter("cloudflow.job.executions",
+                    "status", "FAILED",
+                    "tenantId", tenant.getId().toString()
+            ).increment();
+
+            meterRegistry.timer("cloudflow.job.duration",
+                    "status", "FAILED"
+            ).record(duration, java.util.concurrent.TimeUnit.MILLISECONDS);
 
         } catch (ResourceAccessException e) {
             // Connection timeout or network error
@@ -126,6 +148,14 @@ public class JobWorkerService {
             jobRepository.save(job);
 
             log.warn("Job [{}] {} after {}ms — {}", jobId, status, duration, e.getMessage());
+            meterRegistry.counter("cloudflow.job.executions",
+                    "status", "TIMEOUT",
+                    "tenantId", tenant.getId().toString()
+            ).increment();
+
+            meterRegistry.timer("cloudflow.job.duration",
+                    "status", "TIMEOUT"
+            ).record(duration, java.util.concurrent.TimeUnit.MILLISECONDS);
 
         } catch (Exception e) {
             // Any other unexpected error
@@ -142,7 +172,7 @@ public class JobWorkerService {
 
             log.error("Job [{}] FAILED with unexpected error: {}", jobId, e.getMessage());
         }
-
+        jobStatusBroadcaster.broadcastExecutionUpdate(execution);
         return executionRepository.save(execution);
     }
 }

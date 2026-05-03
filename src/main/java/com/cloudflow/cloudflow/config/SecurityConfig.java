@@ -39,7 +39,9 @@ public class SecurityConfig {
                                 "/swagger-ui.html",
                                 "/v3/api-docs/**",
                                 "/actuator/health",
-                                "/actuator/prometheus"
+                                "/actuator/prometheus",
+                                "/ws/**"
+                                //added
                         ).permitAll()
                         // Everything else requires a valid JWT
                         .anyRequest().authenticated()
