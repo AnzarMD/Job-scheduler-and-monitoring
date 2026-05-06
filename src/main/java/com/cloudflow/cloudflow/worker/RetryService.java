@@ -7,6 +7,7 @@ import com.cloudflow.cloudflow.job.Job;
 import com.cloudflow.cloudflow.job.JobRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Service;
 
@@ -16,12 +17,21 @@ import java.util.UUID;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
+//@RequiredArgsConstructor
 public class RetryService {
 
     private final JobRepository jobRepository;
-    private final TaskScheduler taskScheduler;
     private final KafkaProducerService kafkaProducerService;
+    private final TaskScheduler taskScheduler;
+
+    // Constructor injection with @Qualifier
+    public RetryService(JobRepository jobRepository,
+                        KafkaProducerService kafkaProducerService,
+                        @Qualifier("retryTaskScheduler") TaskScheduler taskScheduler) {
+        this.jobRepository = jobRepository;
+        this.kafkaProducerService = kafkaProducerService;
+        this.taskScheduler = taskScheduler;
+    }
 
     public void handleExecutionResult(UUID jobId, String status, int attemptNumber) {
         if ("SUCCESS".equals(status)) return;
@@ -38,21 +48,21 @@ public class RetryService {
             log.info("Job [{}] failed on attempt {}/{}. Retrying in {}s via Kafka",
                     jobId, attemptNumber, retryLimit, job.getRetryDelaySeconds());
 
-            // Schedule a delayed publish to job.trigger topic
-            // TaskScheduler handles the delay, then Kafka handles the execution
-            taskScheduler.schedule(
-                    () -> {
-                        JobTriggerEvent retryEvent = JobTriggerEvent.builder()
-                                .jobId(jobId.toString())
-                                .tenantId(job.getTenant().getId().toString())
-                                .attemptNumber(nextAttempt)
-                                .triggeredBy("SCHEDULER")
-                                .triggeredAt(OffsetDateTime.now())
-                                .build();
-                        kafkaProducerService.publishJobTrigger(retryEvent);
-                    },
-                    Instant.now().plusMillis(delayMs)
-            );
+            // Capture values for lambda — lambda cannot capture non-final fields
+            String tenantId = job.getTenant().getId().toString();
+            Instant fireAt = Instant.now().plusMillis(delayMs);
+
+            taskScheduler.schedule(() -> {
+                JobTriggerEvent retryEvent = JobTriggerEvent.builder()
+                        .jobId(jobId.toString())
+                        .tenantId(tenantId)
+                        .attemptNumber(nextAttempt)
+                        .triggeredBy("SCHEDULER")
+                        .triggeredAt(OffsetDateTime.now())
+                        .build();
+                kafkaProducerService.publishJobTrigger(retryEvent);
+                log.info("Retry attempt {} published to Kafka for job [{}]", nextAttempt, jobId);
+            }, fireAt);
 
         } else {
             log.warn("Job [{}] exhausted all {} retries. Publishing to job.alert topic.",

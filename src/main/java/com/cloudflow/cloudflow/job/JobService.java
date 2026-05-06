@@ -3,6 +3,8 @@ package com.cloudflow.cloudflow.job;
 import com.cloudflow.cloudflow.job.dto.CreateJobRequest;
 import com.cloudflow.cloudflow.job.dto.JobResponse;
 import com.cloudflow.cloudflow.job.dto.UpdateJobRequest;
+import com.cloudflow.cloudflow.kafka.KafkaProducerService;
+import com.cloudflow.cloudflow.kafka.events.JobTriggerEvent;
 import com.cloudflow.cloudflow.multitenancy.TenantContext;
 import com.cloudflow.cloudflow.scheduler.JobSchedulerService;
 import com.cloudflow.cloudflow.tenant.Tenant;
@@ -10,6 +12,7 @@ import com.cloudflow.cloudflow.tenant.TenantRepository;
 import com.cloudflow.cloudflow.user.User;
 import com.cloudflow.cloudflow.user.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -20,6 +23,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class JobService {
 
     private final JobRepository jobRepository;
@@ -27,6 +31,7 @@ public class JobService {
     private final UserRepository userRepository;
     private final CronValidator cronValidator;
     private final JobSchedulerService jobSchedulerService; // NEW
+    private final KafkaProducerService kafkaProducerService;
 
     private UUID currentTenantId() {
         return TenantContext.getTenantId();
@@ -163,7 +168,20 @@ public class JobService {
     public JobResponse triggerJobNow(UUID jobId) {
         Job job = jobRepository.findByIdAndTenantId(jobId, currentTenantId())
                 .orElseThrow(() -> new IllegalArgumentException("Job not found: " + jobId));
-        jobSchedulerService.triggerJobNow(jobId);
+
+        // Bypass Quartz entirely — publish directly to Kafka.
+        // This works even for jobs not in qrtz_job_details.
+        // "USER" triggeredBy distinguishes manual from scheduled fires.
+        JobTriggerEvent event = JobTriggerEvent.builder()
+                .jobId(jobId.toString())
+                .tenantId(job.getTenant().getId().toString())
+                .attemptNumber(1)
+                .triggeredBy("USER")
+                .triggeredAt(java.time.OffsetDateTime.now())
+                .build();
+
+        kafkaProducerService.publishJobTrigger(event);
+        log.info("Manual trigger published to Kafka for job [{}]", jobId);
         return JobResponse.from(job);
     }
 }
