@@ -22,8 +22,8 @@ spec:
     spec:
       containers:
         - name: cloudflow
-          image: cloudflow:latest
-          imagePullPolicy: IfNotPresent   # Use local image (Minikube)
+          image: anzarmd/cloudflow:latest
+          imagePullPolicy: Always   # Use local image (Minikube)
           ports:
             - containerPort: 8080
           env:

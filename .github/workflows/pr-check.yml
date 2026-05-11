@@ -1,0 +1,45 @@
+name: PR Check
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  quality-check:
+    name: Quality Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Check code compiles
+        run: ./mvnw clean compile -q
+
+      - name: Run unit tests
+        run: |
+          ./mvnw test \
+            -Dtest="CronValidatorTest,AuthServiceTest,JobServiceTest" \
+            -DfailIfNoTests=false \
+            -Dnet.bytebuddy.experimental=true
+
+      - name: Check no TODO/FIXME in production code
+        run: |
+          # Warn (don't fail) if TODOs exist in src/main
+          COUNT=$(grep -r "TODO\|FIXME" src/main --include="*.java" | wc -l)
+          echo "Found ${COUNT} TODO/FIXME comments in production code"
+
+      - name: Check Dockerfile exists
+        run: |
+          test -f Dockerfile && echo "✅ Dockerfile found" || (echo "❌ Dockerfile missing" && exit 1)
+
+      - name: Check K8s manifests exist
+        run: |
+          test -d k8s && echo "✅ k8s/ folder found" || (echo "❌ k8s/ folder missing" && exit 1)

@@ -1,0 +1,69 @@
+name: CD — Deploy to Kubernetes
+
+# Triggers only after the CI workflow completes successfully on main
+on:
+  workflow_run:
+    workflows: [ "CI — Build, Test, Push" ]
+    types: [ completed ]
+    branches: [ main ]
+
+jobs:
+  deploy:
+    name: Deploy to Kubernetes
+    runs-on: ubuntu-latest
+    # Only deploy if CI succeeded
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Verify cluster connection
+        run: kubectl get nodes
+
+      - name: Update image in deployment
+        run: |
+          # Get the SHA tag that was just pushed
+          SHA_TAG="sha-$(echo ${{ github.event.workflow_run.head_sha }} | cut -c1-7)"
+          IMAGE="${{ secrets.DOCKERHUB_USERNAME }}/cloudflow:${SHA_TAG}"
+
+          echo "🚀 Deploying image: ${IMAGE}"
+
+          # Update the deployment to use the new image
+          kubectl set image deployment/cloudflow-app \
+            cloudflow=${IMAGE} \
+            -n cloudflow
+
+      - name: Wait for rollout to complete
+        run: |
+          kubectl rollout status deployment/cloudflow-app \
+            -n cloudflow \
+            --timeout=300s
+
+      - name: Verify deployment
+        run: |
+          echo "📦 Running pods:"
+          kubectl get pods -n cloudflow -l app=cloudflow-app
+
+          echo ""
+          echo "🌐 Services:"
+          kubectl get services -n cloudflow
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          echo "❌ Deployment failed! Rolling back..."
+          kubectl rollout undo deployment/cloudflow-app -n cloudflow
+          kubectl rollout status deployment/cloudflow-app -n cloudflow --timeout=120s
+          echo "✅ Rollback complete"
