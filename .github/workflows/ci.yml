@@ -31,6 +31,8 @@ jobs:
           distribution: 'temurin'
           cache: maven       # Cache ~/.m2 between runs — speeds up subsequent builds
 
+      - name: Make mvnw executable
+        run: chmod +x mvnw
       - name: Run unit tests
         run: |
           ./mvnw test \
@@ -64,6 +66,9 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
           cache: maven
+
+      - name: Make mvnw executable
+        run: chmod +x mvnw
 
       - name: Build JAR (skip tests — already ran)
         run: ./mvnw clean package -DskipTests -q
