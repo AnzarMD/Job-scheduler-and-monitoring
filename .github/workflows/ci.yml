@@ -39,7 +39,7 @@ jobs:
             -Dtest="CronValidatorTest,AuthServiceTest,JobServiceTest" \
             -DfailIfNoTests=false \
             -Dnet.bytebuddy.experimental=true \
-            -XX:+EnableDynamicAgentLoading
+#            -XX:+EnableDynamicAgentLoading
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
