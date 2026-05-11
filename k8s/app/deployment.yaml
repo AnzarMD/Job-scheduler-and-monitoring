@@ -1,0 +1,119 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflow-app
+  namespace: cloudflow
+  labels:
+    app: cloudflow-app
+spec:
+  replicas: 2             # Start with 2 replicas for HA
+  selector:
+    matchLabels:
+      app: cloudflow-app
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1         # Allow 1 extra pod during updates
+      maxUnavailable: 0   # Never have zero running pods during update
+  template:
+    metadata:
+      labels:
+        app: cloudflow-app
+    spec:
+      containers:
+        - name: cloudflow
+          image: cloudflow:latest
+          imagePullPolicy: IfNotPresent   # Use local image (Minikube)
+          ports:
+            - containerPort: 8080
+          env:
+            # From ConfigMap
+            - name: DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: cloudflow-config
+                  key: DB_HOST
+            - name: DB_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: cloudflow-config
+                  key: DB_PORT
+            - name: DB_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: cloudflow-config
+                  key: DB_NAME
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                configMapKeyRef:
+                  name: cloudflow-config
+                  key: KAFKA_BOOTSTRAP_SERVERS
+            - name: REDIS_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: cloudflow-config
+                  key: REDIS_HOST
+            - name: REDIS_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: cloudflow-config
+                  key: REDIS_PORT
+            # From Secrets
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: cloudflow-secrets
+                  key: DB_USERNAME
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: cloudflow-secrets
+                  key: DB_PASSWORD
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: cloudflow-secrets
+                  key: REDIS_PASSWORD
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: cloudflow-secrets
+                  key: JWT_SECRET
+            # Spring Boot datasource using env vars
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://$(DB_HOST):$(DB_PORT)/$(DB_NAME)"
+            - name: SPRING_DATASOURCE_USERNAME
+              value: "$(DB_USERNAME)"
+            - name: SPRING_DATASOURCE_PASSWORD
+              value: "$(DB_PASSWORD)"
+            - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+              value: "$(KAFKA_BOOTSTRAP_SERVERS)"
+            - name: SPRING_DATA_REDIS_HOST
+              value: "$(REDIS_HOST)"
+            - name: SPRING_DATA_REDIS_PORT
+              value: "$(REDIS_PORT)"
+            - name: SPRING_DATA_REDIS_PASSWORD
+              value: "$(REDIS_PASSWORD)"
+            - name: CLOUDFLOW_JWT_SECRET
+              value: "$(JWT_SECRET)"
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 5
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 90
+            periodSeconds: 30
+            failureThreshold: 3

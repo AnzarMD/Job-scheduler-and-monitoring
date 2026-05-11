@@ -31,3 +31,37 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Maven
+target/
+*.class
+
+# IntelliJ
+.idea/
+*.iml
+*.iws
+*.xml.bak
+
+# Sensitive config — NEVER commit these
+application-local.yml
+application-dev.yml
+
+# Kubernetes secrets — NEVER commit real secrets
+k8s/secrets.yaml
+
+# Environment files
+.env
+*.env
+*.env.local
+.env.*
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker override files with credentials
+docker-compose.override.yml

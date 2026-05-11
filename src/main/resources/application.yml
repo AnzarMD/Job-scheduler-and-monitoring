@@ -1,26 +1,25 @@
 spring:
-  application:
-    name: cloudflow
-
   datasource:
-    url: jdbc:postgresql://localhost:5433/cloudflow
-    username: cloudflow_user
-    password: cloudflow_pass
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5433}/${DB_NAME:cloudflow}
+    username: ${DB_USERNAME:cloudflow_user}
+    password: ${DB_PASSWORD:cloudflow_pass}
     driver-class-name: org.postgresql.Driver
-
   jpa:
     hibernate:
-      ddl-auto: validate        # Flyway owns schema creation. Hibernate only checks it matches.
-    show-sql: false
+      ddl-auto: validate
     properties:
-      hibernate.dialect: org.hibernate.dialect.PostgreSQLDialect
-
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
   flyway:
     enabled: true
     locations: classpath:db/migration
-
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     consumer:
       group-id: cloudflow-group
       auto-offset-reset: earliest
@@ -29,30 +28,21 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
-
-  data:
-    redis:
-      host: localhost
-      port: 6379
-      password: redispass
-
   quartz:
-    job-store-type: jdbc           # Store jobs in PostgreSQL, not memory
+    job-store-type: jdbc
     jdbc:
-      initialize-schema: always    # Creates the 11 qrtz_ tables on startup
+      initialize-schema: never
     properties:
       org.quartz.jobStore.isClustered: true
       org.quartz.scheduler.instanceId: AUTO
       org.quartz.jobStore.driverDelegateClass: org.quartz.impl.jdbcjobstore.PostgreSQLDelegate
 
-
 cloudflow:
   jwt:
-    secret: "3cfa76ef14937c1c0ea519f8fc057a80fcd04a7420f8e8bcd0a7567c272e007b"
-    expiration-ms: 86400000        # 24 hours in milliseconds
+    secret: ${JWT_SECRET:3cfa76ef14937c1c0ea519f8fc057a80fcd04a7420f8e8bcd0a7567c272e007b}
+    expiration-ms: ${JWT_EXPIRATION_MS:86400000}
   rate-limit:
-    requests-per-minute: 100
-
+    requests-per-minute: ${RATE_LIMIT_RPM:100}
   kafka:
     topics:
       job-trigger: job.trigger
@@ -68,3 +58,6 @@ management:
     metrics:
       export:
         enabled: true
+
+server:
+  port: 8080
