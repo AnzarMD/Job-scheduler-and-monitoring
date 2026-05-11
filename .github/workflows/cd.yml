@@ -1,4 +1,72 @@
-name: CD — GitOps Update Manifest
+#name: CD — GitOps Update Manifest
+#
+#on:
+#  workflow_run:
+#    workflows: [ "CI — Build, Test, Push" ]
+#    types: [ completed ]
+#    branches: [ main ]
+#
+#jobs:
+#  update-manifest:
+#    name: Update K8s image tag in repo
+#    runs-on: ubuntu-latest
+#    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+#
+#    steps:
+#      - name: Checkout code
+#        uses: actions/checkout@v4
+#        with:
+#          # Use a PAT so the commit can trigger future workflows
+#          # For now GITHUB_TOKEN is fine
+#          token: ${{ secrets.GITHUB_TOKEN }}
+#          ref: main
+#
+#      - name: Compute image tag
+#        id: tag
+#        run: |
+#          SHA=$(echo "${{ github.event.workflow_run.head_sha }}" | cut -c1-7)
+#          echo "sha=${SHA}" >> $GITHUB_OUTPUT
+#          echo "image=${{ secrets.DOCKERHUB_USERNAME }}/cloudflow:sha-${SHA}" >> $GITHUB_OUTPUT
+#
+#      - name: Update image in deployment manifest
+#        run: |
+#          IMAGE="${{ steps.tag.outputs.image }}"
+#          echo "Updating k8s/app/deployment.yaml to use: ${IMAGE}"
+#
+#          # Replace whatever image is currently in the file
+#          sed -i "s|image: .*/cloudflow:.*|image: ${IMAGE}|g" k8s/app/deployment.yaml
+#
+#          echo "--- Updated line ---"
+#          grep "image:" k8s/app/deployment.yaml
+#
+#      - name: Commit and push updated manifest
+#        run: |
+#          git config user.name "github-actions[bot]"
+#          git config user.email "github-actions[bot]@users.noreply.github.com"
+#
+#          git add k8s/app/deployment.yaml
+#
+#          # Only commit if something actually changed
+#          if git diff --staged --quiet; then
+#            echo "No manifest changes — image tag already up to date"
+#          else
+#            git commit -m "cd: deploy sha-${{ steps.tag.outputs.sha }} [skip ci]"
+#            git push origin main
+#            echo "✅ Manifest updated and pushed"
+#          fi
+#
+#      - name: Output deploy instructions
+#        run: |
+#          echo ""
+#          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+#          echo "✅ Manifest updated to:"
+#          echo "   ${{ steps.tag.outputs.image }}"
+#          echo ""
+#          echo "To apply to your local Minikube cluster:"
+#          echo "   kubectl apply -f k8s/app/deployment.yaml"
+#          echo "   kubectl rollout status deployment/cloudflow-app -n cloudflow"
+#          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+name: CD — Deploy (Manual)
 
 on:
   workflow_run:
@@ -7,62 +75,17 @@ on:
     branches: [ main ]
 
 jobs:
-  update-manifest:
-    name: Update K8s image tag in repo
+  notify:
+    name: Deployment Ready
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          # Use a PAT so the commit can trigger future workflows
-          # For now GITHUB_TOKEN is fine
-          token: ${{ secrets.GITHUB_TOKEN }}
-          ref: main
-
-      - name: Compute image tag
-        id: tag
+      - name: Image ready for deployment
         run: |
           SHA=$(echo "${{ github.event.workflow_run.head_sha }}" | cut -c1-7)
-          echo "sha=${SHA}" >> $GITHUB_OUTPUT
-          echo "image=${{ secrets.DOCKERHUB_USERNAME }}/cloudflow:sha-${SHA}" >> $GITHUB_OUTPUT
-
-      - name: Update image in deployment manifest
-        run: |
-          IMAGE="${{ steps.tag.outputs.image }}"
-          echo "Updating k8s/app/deployment.yaml to use: ${IMAGE}"
-
-          # Replace whatever image is currently in the file
-          sed -i "s|image: .*/cloudflow:.*|image: ${IMAGE}|g" k8s/app/deployment.yaml
-
-          echo "--- Updated line ---"
-          grep "image:" k8s/app/deployment.yaml
-
-      - name: Commit and push updated manifest
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          git add k8s/app/deployment.yaml
-
-          # Only commit if something actually changed
-          if git diff --staged --quiet; then
-            echo "No manifest changes — image tag already up to date"
-          else
-            git commit -m "cd: deploy sha-${{ steps.tag.outputs.sha }} [skip ci]"
-            git push origin main
-            echo "✅ Manifest updated and pushed"
-          fi
-
-      - name: Output deploy instructions
-        run: |
+          echo "✅ Docker image ready: ${{ secrets.DOCKERHUB_USERNAME }}/cloudflow:sha-${SHA}"
           echo ""
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "✅ Manifest updated to:"
-          echo "   ${{ steps.tag.outputs.image }}"
-          echo ""
-          echo "To apply to your local Minikube cluster:"
-          echo "   kubectl apply -f k8s/app/deployment.yaml"
-          echo "   kubectl rollout status deployment/cloudflow-app -n cloudflow"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "To deploy locally, run:"
+          echo "  kubectl set image deployment/cloudflow-app cloudflow=${{ secrets.DOCKERHUB_USERNAME }}/cloudflow:sha-${SHA} -n cloudflow"
+          echo "  kubectl rollout status deployment/cloudflow-app -n cloudflow"
