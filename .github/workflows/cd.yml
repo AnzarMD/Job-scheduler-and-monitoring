@@ -1,6 +1,5 @@
-name: CD — Deploy to Kubernetes
+name: CD — GitOps Update Manifest
 
-# Triggers only after the CI workflow completes successfully on main
 on:
   workflow_run:
     workflows: [ "CI — Build, Test, Push" ]
@@ -8,62 +7,62 @@ on:
     branches: [ main ]
 
 jobs:
-  deploy:
-    name: Deploy to Kubernetes
+  update-manifest:
+    name: Update K8s image tag in repo
     runs-on: ubuntu-latest
-    # Only deploy if CI succeeded
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Set up kubectl
-        uses: azure/setup-kubectl@v3
         with:
-          version: 'v1.28.0'
+          # Use a PAT so the commit can trigger future workflows
+          # For now GITHUB_TOKEN is fine
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: main
 
-      - name: Configure kubeconfig
+      - name: Compute image tag
+        id: tag
         run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > ~/.kube/config
-          chmod 600 ~/.kube/config
+          SHA=$(echo "${{ github.event.workflow_run.head_sha }}" | cut -c1-7)
+          echo "sha=${SHA}" >> $GITHUB_OUTPUT
+          echo "image=${{ secrets.DOCKERHUB_USERNAME }}/cloudflow:sha-${SHA}" >> $GITHUB_OUTPUT
 
-      - name: Verify cluster connection
-        run: kubectl get nodes
-
-      - name: Update image in deployment
+      - name: Update image in deployment manifest
         run: |
-          # Get the SHA tag that was just pushed
-          SHA_TAG="sha-$(echo ${{ github.event.workflow_run.head_sha }} | cut -c1-7)"
-          IMAGE="${{ secrets.DOCKERHUB_USERNAME }}/cloudflow:${SHA_TAG}"
+          IMAGE="${{ steps.tag.outputs.image }}"
+          echo "Updating k8s/app/deployment.yaml to use: ${IMAGE}"
 
-          echo "🚀 Deploying image: ${IMAGE}"
+          # Replace whatever image is currently in the file
+          sed -i "s|image: .*/cloudflow:.*|image: ${IMAGE}|g" k8s/app/deployment.yaml
 
-          # Update the deployment to use the new image
-          kubectl set image deployment/cloudflow-app \
-            cloudflow=${IMAGE} \
-            -n cloudflow
+          echo "--- Updated line ---"
+          grep "image:" k8s/app/deployment.yaml
 
-      - name: Wait for rollout to complete
+      - name: Commit and push updated manifest
         run: |
-          kubectl rollout status deployment/cloudflow-app \
-            -n cloudflow \
-            --timeout=300s
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Verify deployment
+          git add k8s/app/deployment.yaml
+
+          # Only commit if something actually changed
+          if git diff --staged --quiet; then
+            echo "No manifest changes — image tag already up to date"
+          else
+            git commit -m "cd: deploy sha-${{ steps.tag.outputs.sha }} [skip ci]"
+            git push origin main
+            echo "✅ Manifest updated and pushed"
+          fi
+
+      - name: Output deploy instructions
         run: |
-          echo "📦 Running pods:"
-          kubectl get pods -n cloudflow -l app=cloudflow-app
-
           echo ""
-          echo "🌐 Services:"
-          kubectl get services -n cloudflow
-
-      - name: Rollback on failure
-        if: failure()
-        run: |
-          echo "❌ Deployment failed! Rolling back..."
-          kubectl rollout undo deployment/cloudflow-app -n cloudflow
-          kubectl rollout status deployment/cloudflow-app -n cloudflow --timeout=120s
-          echo "✅ Rollback complete"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "✅ Manifest updated to:"
+          echo "   ${{ steps.tag.outputs.image }}"
+          echo ""
+          echo "To apply to your local Minikube cluster:"
+          echo "   kubectl apply -f k8s/app/deployment.yaml"
+          echo "   kubectl rollout status deployment/cloudflow-app -n cloudflow"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
