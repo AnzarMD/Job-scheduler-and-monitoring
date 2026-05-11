@@ -120,7 +120,7 @@ jobs:
         with:
           images: ${{ env.IMAGE_NAME }}
           tags: |
-#            Tag with git SHA (e.g. sha-abc1234) — immutable, traceable
+            # Tag with git SHA (e.g. sha-abc1234) — immutable, traceable
             type=sha,prefix=sha-
             # Tag with branch name (e.g. main)
             type=ref,event=branch
