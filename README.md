@@ -34,14 +34,7 @@
 
 CloudFlow is a production-grade job scheduling platform that lets teams create, schedule, monitor, and alert on HTTP-based jobs across multiple tenants.
 
-Built as a 15-day learning project covering:
 
-- Distributed systems
-- Event-driven architecture
-- Modern Java backend engineering
-- Cloud-native deployment
-- Kubernetes orchestration
-- CI/CD automation
 
 ## What it does
 
